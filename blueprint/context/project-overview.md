@@ -1,6 +1,6 @@
 # authify - Project Overview
 
-<!-- blueprint:source-hash 9e5c673a6669b6abb038531bee3fb2eaba8457b9f86cbbe383bb09249d2bbaa7 -->
+<!-- blueprint:source-hash 845f75775d584bae3b9d3f98f6cb30f170eab87235983cb20e49f2103130040f -->
 
 > A hands-on AWS Cognito playground: a modern Next.js UI that drives the full
 > Cognito API surface through a hand-rolled HTTP client (no AWS SDK).
@@ -10,17 +10,20 @@
 The goal is to learn AWS Cognito end to end by building the UI and server code
 that calls every meaningful part of its API. Rather than leaning on Amplify or
 `@aws-sdk`, the project implements its own thin client so the request shapes,
-challenge state machine, token handling, and signing are all visible and
+challenge state machine, token handling, and SigV4 signing are all visible and
 understood. It is a learning project, not a commercial product.
 
 ## Users
 
 Not for commercial use. Two roles exercised by the same app:
 
-- **Public user** - signs up, confirms email, signs in, manages their own
-  password, MFA, profile, and account.
+- **Public user** - signs up, confirms email, signs in (password or SRP),
+  manages their own password, MFA, profile, and account.
 - **Admin** - member of the `Admins` group; manages other users and groups from
   a protected `/admin` area.
+
+Groups are the single source of truth for role; there is no custom role
+attribute.
 
 ## Features
 
@@ -106,10 +109,10 @@ HTTP client** (item 3) that every later feature calls through.
 
 ## Data model
 
-The app stores almost nothing itself; **Cognito is the system of record** for
-identity. MongoDB holds one companion document per Cognito user.
+The app stores almost nothing about identity itself; **Cognito is the system of
+record**. MongoDB holds two collections (`project-plan.md` §4).
 
-### User (MongoDB `users`)
+### User (`users`) - one companion document per Cognito user
 
 - `_id` (ObjectId)
 - `cognitoSub` (string, unique) - Cognito user pool `sub`; the join key every
@@ -117,7 +120,7 @@ identity. MongoDB holds one companion document per Cognito user.
 - `email` (string) - mirrored from Cognito so the login screen can resolve
   `authStrategy` before authenticating (needed for SRP, item 22)
 - `authStrategy` (`"USER_PASSWORD_AUTH"` | `"USER_SRP_AUTH"`, default
-  `"USER_PASSWORD_AUTH"`) - which sign-in flow this user uses (item 21)
+  `"USER_PASSWORD_AUTH"`) - which sign-in flow this user uses (items 21-22)
 - `profile` (object, item 20)
   - `nickname` (string, optional)
   - `age` (number, optional)
@@ -129,22 +132,36 @@ identity. MongoDB holds one companion document per Cognito user.
 - `createdAt` (Date), `updatedAt` (Date)
 
 > `cognitoSub` uniqueness and its role as the link key are locked; later
-> features (profile, settings, avatar) all query by it.
+> features (profile, settings, avatar) all query by it. Created on first sign-in.
+
+### ApiCallLog (`apiCallLogs`) - capped collection, written by the custom client
+
+- `target` (string) - `X-Amz-Target` action or endpoint path
+- `requestBody` (object) - outgoing payload, with `Password`, `SECRET_HASH`,
+  `Session`, `AccessToken`, `RefreshToken` redacted
+- `statusCode` (number)
+- `responseBody` (object) - response with tokens redacted
+- `challengeName` (string, optional) - e.g. `NEW_PASSWORD_REQUIRED`,
+  `SOFTWARE_TOKEN_MFA`
+- `cognitoSub` (string, optional) - when the caller is known
+- `durationMs` (number)
+- `createdAt` (Date)
+
+> Capped at ~5000 documents so it self-trims. Backs the in-app `/api-log`
+> inspector (item 3).
 
 ### External state (AWS, provisioned via Terragrunt)
 
 - **User pool user** - standard attributes (`email`, `name`, `email_verified`),
   MFA config, group membership
-- **Groups** - `Admins`, `Users` (`cognito:groups` claim drives RBAC)
+- **Groups** - `Admins`, `Users`; the `cognito:groups` claim is the only role
+  source
 - **App clients** - confidential web client (secret, `SECRET_HASH`); separate M2M
   client for `client_credentials`
 - **Resource server + custom scopes** - target of M2M access tokens (item 26)
 - **Identity pool** - maps a user-pool token to an `identityId` and temporary IAM
   credentials (items 32-33)
 - **S3 bucket** - private, objects under `<identityId>/` prefixes (item 34)
-- **Cognito API call log** - every request/response from the custom client;
-  persistence medium not yet decided (`> TODO`: MongoDB collection vs in-memory
-  vs server logs)
 
 ## Tech stack
 
@@ -154,15 +171,15 @@ identity. MongoDB holds one companion document per Cognito user.
   across the project
 - **shadcn/ui + Tailwind v4** - components and styling; violet-forward theme with
   light/dark already defined in `app/globals.css`
-- **MongoDB** - the `users` companion collection (profile, auth settings, avatar
-  metadata); runs as a container
+- **MongoDB** - the `users` and `apiCallLogs` collections; runs as a container
 - **Custom Cognito client** - hand-rolled calls to `cognito-idp`,
   `cognito-identity`, and the OAuth2 token endpoint, plus a SigV4 signer and
   `SECRET_HASH` helper; **no AWS SDK / Amplify**
+- **jose** - JWKS fetch/cache and each claim check written by hand (chosen over
+  `aws-jwt-verify` for learning)
 - **Terragrunt** - provisions all AWS resources listed under External state
 - **Docker + Docker Compose** - local dev: Next.js container + MongoDB container,
   `docker compose up`
-- **JWT verification library** - `jose` or `aws-jwt-verify` (`> TODO`: pick one)
 
 ## Monetization
 
@@ -203,22 +220,10 @@ deployment in this phase** and no CI/CD yet - explicitly deferred.
 
 ## Open questions
 
-Contradictions and gaps between `project-plan.md` and `build-plan.md` - resolve
-in the plans, then re-run `/overview`:
+Minor, non-blocking:
 
-1. **`custom:role` custom attribute** - `project-plan.md` §3 still says sign-up
-   collects `custom:role`. The build plan dropped custom attributes from sign-up;
-   RBAC is `cognito:groups` only, and custom schema attributes are now just an
-   optional item (35). Update §3 or re-add a custom-attribute feature.
-2. **Data section is unspecified** - `project-plan.md` §4 says "infer from
-   features". The `User` model above is derived from build items 8, 20, 21, 34;
-   fold it back into §4 if you want it authoritative.
-3. **JWT verification library** - `project-plan.md` §5 lists "aws-jwt-verify or
-   jose"; not chosen. Item 24 needs one.
-4. **SRP and machine-to-machine scope** - build items 21-22 (SRP toggle) and 26
-   (client credentials) came from the discovery conversation and are not in
-   `project-plan.md` §3. Add them to §3 so the plan matches the roadmap.
-5. **API call log persistence** - the custom client logs every call (item 3),
-   but where it is stored is undecided (MongoDB collection vs memory vs logs).
-6. **Foundational items 1-3** are setup-flavored rather than user-visible, but
-   kept because they are substantive deliverables central to the learning goal.
+1. **Foundational items 1-3** are setup-flavored rather than user-visible, but
+   kept in the build plan because they are substantive deliverables central to
+   the learning goal.
+2. The rough **"Phase 1-5" list** in `project-plan.md` §3 predates the 9-milestone
+   build plan and is now only loose background; the build plan is authoritative.

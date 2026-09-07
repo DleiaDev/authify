@@ -17,9 +17,11 @@ Not intended for commercial use. But it needs to support both public and admin f
 
 ## 3. Features - What does the MVP need?
 
-Sign Up & Email Verification: Build a registration form collecting standard attributes (Email, Name) and custom attributes (e.g., custom:role). Trigger Cognito’s native OTP email confirmation flow.
+Sign Up & Email Verification: Build a registration form collecting standard attributes (Email, Name). Trigger Cognito’s native OTP email confirmation flow.
 
 Sign In & Session Storage: Implement standard password login returning standard OIDC tokens (id_token, access_token, refresh_token).
+
+Selectable Auth Strategy (Password vs SRP): Let each user pick their sign-in flow on the settings page, stored per user in MongoDB (authStrategy). Default is plain password auth (USER_PASSWORD_AUTH via InitiateAuth). When SRP is selected, implement the Secure Remote Password handshake by hand (USER_SRP_AUTH: send SRP_A, then answer the PASSWORD_VERIFIER challenge with SECRET_BLOCK, TIMESTAMP, and PASSWORD_CLAIM_SIGNATURE). The login screen resolves the user by email first to know which flow to run.
 
 Token Storage Strategy: Store tokens in httpOnly secure cookies via Next.js Middleware or Server Actions to handle SSR/CSR auth state smoothly.
 
@@ -29,10 +31,13 @@ Admin-Initiated Force Password Change: Create a test scenario handling the NEW_P
 
 Multi-Factor Authentication (MFA) - Time-Based One-Time Password (TOTP): Implement a profile screen feature where users can enable TOTP. Generate a QR code using Cognito's secret key output (AssociateSoftwareToken API) and verify the setup with an authenticator app code.
 
-User Pool Groups: Create two groups in Cognito (e.g., Admins, Users).
+User Pool Groups as Roles: Create two groups in Cognito (Admins, Users). Groups are the single source of truth for a user's role; there is no custom role attribute. Membership is managed through the Cognito group APIs (AdminAddUserToGroup / AdminRemoveUserFromGroup) and surfaces in the token as the cognito:groups claim.
+
 Next.js Route Protection: Decode the JWT access_token or id_token in Next.js Middleware (middleware.ts). Restrict access to /admin routes based on the cognito:groups array inside the token payload.
 
-Do Server-Side JWT Verification, a utility created with aws-jwt-verify or jose to download Cognito's JSON Web Key Set (JWKS) and validate the JWT signature, issuer (iss), audience (client_id), and token expiration (exp) before returning data.
+Do Server-Side JWT Verification, a utility created with jose (chosen over aws-jwt-verify so the JWKS fetch/cache and every claim check are implemented by hand for learning) to download Cognito's JSON Web Key Set (JWKS) and validate the JWT signature, issuer (iss), audience (client_id), token use (token_use), and token expiration (exp) before returning data.
+
+Machine-to-Machine Access (OAuth2 Client Credentials): Provision a Cognito domain, a resource server with custom scopes, and a separate app client that uses the client_credentials grant. Implement a backend caller that requests an access token from POST /oauth2/token (grant_type=client_credentials, HTTP Basic auth with the M2M client id and secret) and uses it to call the protected server API. The JWKS utility verifies these tokens too: token_use=access, client_id, and the required scope claim, with no id_token and no user in the loop.
 
 Federated AWS Access (Cognito Identity Pool) - Exchange the User Pool id_token via an Identity Pool (GetCredentialsForIdentity API) to acquire temporary IAM credentials (AccessKeyId, SecretKey, SessionToken). Direct Client-to-S3 Upload: Use the temporary IAM credentials in the browser to upload an avatar or document directly to a private Amazon S3 bucket path scoped to the user's Cognito Identity ID (/s3-bucket/${cognito-identity-id}/\*).
 
@@ -46,11 +51,38 @@ These phases are just rough ideas, please feel free to modify anything if there 
 
 ## 4. Data - What are we storing?
 
-Don't have exact entities now, you should infer it from features above.
+Cognito is the system of record for identity. MongoDB holds two collections.
+
+### users - one companion document per Cognito user
+
+- cognitoSub (string, unique) - Cognito user pool `sub`; the join key every feature uses
+- email (string) - mirrored from Cognito so the login screen can resolve authStrategy before authenticating (needed for SRP)
+- authStrategy ("USER_PASSWORD_AUTH" | "USER_SRP_AUTH", default "USER_PASSWORD_AUTH") - which sign-in flow this user uses
+- profile.nickname (string, optional)
+- profile.age (number, optional)
+- profile.dateOfBirth (string, ISO date, optional)
+- profile.hobbies (string[], optional)
+- avatar (object, optional) - S3 object metadata: bucket, key (<identityId>/...), contentType, size, uploadedAt
+- createdAt, updatedAt (Date)
+
+The document is created and linked on first sign-in. cognitoSub uniqueness and its role as the link key are locked; profile, settings, and avatar features all query by it.
+
+### apiCallLogs - capped collection, written by the custom Cognito HTTP client
+
+- target (string) - X-Amz-Target action or endpoint path
+- requestBody (object) - outgoing payload with Password, SECRET_HASH, Session, AccessToken, RefreshToken redacted
+- statusCode (number)
+- responseBody (object) - response with tokens redacted
+- challengeName (string, optional) - e.g. NEW_PASSWORD_REQUIRED, SOFTWARE_TOKEN_MFA
+- cognitoSub (string, optional) - when the caller is known
+- durationMs (number)
+- createdAt (Date)
+
+Capped (roughly 5000 documents) so it self-trims and never needs cleanup. Backs the in-app /api-log inspector (build item 3).
 
 ## 5. Tech - What stack are we using?
 
-Next.js, Shadcn UI, MongoDB for storage, Terragrunt for AWS, Docker for local development.
+Next.js, Shadcn UI, MongoDB for storage, Terragrunt for AWS, Docker for local development, jose for JWT/JWKS verification.
 
 There should be Next.js container and mongodb container. Project containers should be runnable with docker compose.
 
