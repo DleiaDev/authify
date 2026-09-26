@@ -1,12 +1,26 @@
 # authify
 
-A Next.js application. Scope and purpose are still being planned; see
-`blueprint/project-plan.md` and `blueprint/build-plan.md`.
+A hands-on AWS Cognito playground: a Next.js UI that drives the Cognito API
+surface through a hand-rolled HTTP client, with no AWS SDK or Amplify, so every
+request, auth challenge, token, and signature is visible. It is a learning
+project, not a commercial product.
+
+It covers public flows (sign up, email confirmation, password and SRP sign-in,
+password recovery, TOTP MFA, profile) and an Admin console, plus server-side JWT
+verification, machine-to-machine access, and Identity Pool credentials for direct
+browser-to-S3 upload. Work is tracked as GitHub issues grouped into milestones.
 
 ## Stack
 
-Next.js 16 (App Router, React Server Components), React 19, TypeScript 5,
-Tailwind v4, shadcn/ui (Base UI), pnpm.
+- **Next.js 16** (App Router, React Server Components), React 19, TypeScript 5
+- **Tailwind v4** and **shadcn/ui** (Base UI)
+- **MongoDB** for the app-side User Companion Record and API Call Log
+- **Hand-rolled Cognito client** for `cognito-idp`, `cognito-identity`, and the
+  OAuth2 token endpoint, with its own `SECRET_HASH` helper and SigV4 signer
+- **jose** for JWKS fetching and JWT claim verification
+- **Terragrunt** for all AWS resources
+- **Docker Compose** for local development (Next.js + MongoDB containers)
+- **pnpm**
 
 ## Commands
 
@@ -19,8 +33,14 @@ Tailwind v4, shadcn/ui (Base UI), pnpm.
 
 No test runner is configured yet.
 
+## Deployment
+
+The eventual target is AWS ECS, but there is no production deployment or CI/CD
+yet; it is deliberately deferred.
+
 ## Working in this repo
 
-AI coding agents follow `AGENTS.md` (and `CLAUDE.md` for Claude Code). The
-project is built one feature at a time behind review gates using the AI
-Blueprint workflow; run `/overview` once the planning docs are filled in.
+- `CONTEXT.md` - domain glossary
+- `docs/adr/` - architectural decisions
+- `CODING_STANDARDS.md` - code conventions
+- `AGENTS.md` - instructions for AI coding agents (`CLAUDE.md` imports it)

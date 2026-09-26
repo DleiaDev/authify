@@ -31,6 +31,11 @@ Uses the five default triage labels (`needs-triage`, `needs-info`, `ready-for-ag
 
 Single-context: one `CONTEXT.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
 
+## Coding standards
+
+Follow `CODING_STANDARDS.md`. Use the domain vocabulary in `CONTEXT.md` and respect
+the decisions in `docs/adr/`.
+
 ## Commands
 
 - Dev server: `pnpm dev` (http://localhost:3000)
@@ -39,4 +44,4 @@ Single-context: one `CONTEXT.md` and `docs/adr/` at the repo root. See `docs/age
 - Lint: `pnpm lint`
 
 Package manager is `pnpm` (see `packageManager` in `package.json`). No unit test
-runner is configured yet.
+runner is configured yet; Vitest is tracked in issue #36.

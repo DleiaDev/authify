@@ -1,0 +1,3 @@
+# Auth Strategy is chosen per User and resolved before authentication
+
+Each User picks an Auth Strategy (Password via `USER_PASSWORD_AUTH`, or SRP via a hand-implemented `USER_SRP_AUTH`), stored on their User Companion Record with Password as the default. Because the strategy decides which sign-in call to make, the sign-in screen looks up the record by email *before* authenticating. A real app would pick one flow for everyone; this exists so both flows can be exercised side by side. The consequence is that email is mirrored from Cognito onto the record, and must be kept in sync when a User changes it.
