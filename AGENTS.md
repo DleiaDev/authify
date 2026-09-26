@@ -42,6 +42,7 @@ the decisions in `docs/adr/`.
 - Build: `pnpm build`
 - Production server: `pnpm start`
 - Lint: `pnpm lint`
+- Test: `pnpm test` (Vitest, single run)
+- Test (watch): `pnpm test:watch`
 
-Package manager is `pnpm` (see `packageManager` in `package.json`). No unit test
-runner is configured yet; Vitest is tracked in issue #36.
+Package manager is `pnpm` (see `packageManager` in `package.json`).
