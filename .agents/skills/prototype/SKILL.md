@@ -1,105 +1,26 @@
 ---
 name: prototype
-description: Plan and create throwaway static HTML and CSS mockups with shared design tokens before feature implementation. Use for /prototype, screen mockups, layout exploration, themes, or deciding a project's look and feel.
+description: Build a throwaway prototype to answer a design question. Use when the user wants to sanity-check whether a state model or logic feels right, or explore what a UI should look like.
 ---
 
-# prototype - lock the look before you build
+# Prototype
 
-**Context reuse:** Reuse any required file already loaded in project instructions or the current session. Read it again only if absent, changed, or exact current bytes or line references are needed.
+A prototype is **throwaway code that answers a question**. The question decides the shape.
 
-**First action:** Before project inspection, preflight, or any other tool call,
-publish `running` to `blueprint/.state/run.json` using the dashboard activity
-contract in `AGENTS.md`.
+## Pick a branch
 
-Where this sits in the workflow:
+Identify which question is being answered, using the user's prompt, the surrounding code, or by asking if the user is around:
 
-    plan  ->  /overview  ->  [prototype]  ->  /feature  ->  build
-    (you      (project-      (lock the       (one spec    (real
-     write)    overview.md)   look)           at a time)   code)
+- **"Does this logic / state model feel right?"** → [LOGIC.md](LOGIC.md). Build a single shareable HTML file (free-play buttons plus tabbed guided walkthroughs) that pushes the state machine through cases that are hard to reason about on paper, and that a non-developer can drive.
+- **"What should this look like?"** → [UI.md](UI.md). Generate several radically different UI variations on a single route, switchable via a URL search param and a floating bottom bar.
 
-Prototyping is a pre-build step, not a feature. It's fast, visual, and throwaway.
-Its one durable output is the theme: a set of CSS theme variables that port into
-the real app's `globals.css` `@theme` when you build the first UI feature.
-Everything else here gets discarded.
+The two branches produce very different artifacts, so getting this wrong wastes the whole prototype. If the question is genuinely ambiguous and the user isn't reachable, default to whichever branch better matches the surrounding code (a backend module → logic; a page or component → UI) and state the assumption at the top of the prototype.
 
-**This skill is plan-first.** Gather the look and the page list, agree on a plan,
-and only then write any files. Never generate mockups before the user approves.
+## Rules that apply to both
 
-## Step 1 - read what the plan already says
-
-Pull the stated look and feel and the screen/route list from
-`blueprint/context/project-overview.md` (its UI/UX section); fall back to the UI/UX section
-of `blueprint/project-plan.md` if the overview isn't generated yet. Use this
-as the starting point, so you're refining the user's intent, not asking from
-scratch.
-
-## Step 2 - ask about the look and the pages
-
-Work in plan mode. Ask the user a short set of questions (use the current tool's
-short user-input prompt for discrete choices when available), seeded with what
-the plan already says:
-
-- **Look and feel** - confirm or adjust the vibe (light/dark, minimal/rich,
-  density, editor-like, and so on), and ask for any reference apps or sites they
-  want it to feel like.
-- **Color and type** - any accent color or font direction (for example,
-  mono-forward for code).
-- **Which pages** - which screens to draft now. Default to the key routes from the
-  plan; let the user add, drop, or reorder. Lean to a few, not every screen.
-
-Keep it short. The user's answers, plus the plan, are the brief for the mockups.
-
-## Step 3 - propose the plan, then wait
-
-Present a short plan and stop for approval:
-
-- the theme direction in a sentence or two (the vibe, accent, fonts), and
-- the list of screens you'll mock, one line each on what each will show (the real
-  states that exercise the theme, not empty shells).
-
-Write nothing until the user approves. Adjust the plan if they push back.
-
-## Step 4 - lock one theme
-
-Once approved, write a single shared `prototypes/theme.css` that defines the theme
-as CSS variables, following `reference/theme-variables.css`: surfaces, text,
-accent, any component-specific states, font stacks, and a small scale. Derive the
-values from the agreed brief.
-
-This file is the deliverable. Keep it the single source of the theme, so tweaking
-it restyles every mockup at once.
-
-## Step 5 - mock each screen
-
-For each approved screen, write a self-contained `prototypes/<screen>.html` that
-links `theme.css` and lays out that screen with realistic dummy content and the
-states that matter (a typing page mid-type with correct/wrong/pending chars and a
-caret; a dashboard with believable stats and history rows; and so on).
-
-- Plain HTML + CSS only. No framework, no build step. A few lines of inline JS for
-  a view toggle is fine; nothing more.
-- Pull every color, font, and spacing value from the `theme.css` variables, never
-  hard-coded. That's what keeps the look consistent and portable.
-- Realistic placeholder content over lorem ipsum. Desktop-first is enough.
-
-## Then stop
-
-Tell the user to open the files in a browser and iterate on the look. Point them
-at the concrete next step: run `/feature` on the first UI feature - it detects
-`prototypes/`, links these mockups as the spec's Design reference, and makes
-porting `theme.css` into the app's `@theme` its first build step. When the theme
-feels right the tokens carry into the real stylesheet; the HTML mockups are
-reference and get discarded at that feature's `/complete`.
-
-**Commit `prototypes/`, do not ignore it.** `theme.css` is the durable output and
-until it is ported it lives nowhere else, and the mockups are the build reference
-the next feature needs - both must survive a context clear or a switch between
-machines. So do not add `prototypes/` to `.gitignore`; it is short-lived in git
-(born here, discarded at the first UI feature's `/complete`), not throwaway that
-never lands. This skill locks the look, it does not build the app.
-
-## Formatting
-
-Format the output to match the project's conventions in
-`blueprint/context/ai-interaction.md`: concise, scannable markdown, with lists for
-enumerations and tables for matrices rather than dense paragraphs.
+1. **Throwaway from day one, and clearly marked as such.** Locate the prototype code close to where it will actually be used (next to the module or page it's prototyping for) so context is obvious, but name it so a casual reader can see it's a prototype, not production. For throwaway UI routes, obey whatever routing convention the project already uses; don't invent a new top-level structure.
+2. **Trivial to run.** A UI prototype starts from one command in the project's task runner: `pnpm <name>`, `python <path>`, `bun <path>`, etc. A logic demo is a single HTML file the user double-clicks. Either way, no thinking required to start it.
+3. **No persistence by default.** State lives in memory. Persistence is the thing the prototype is _checking_, not something it should depend on. If the question explicitly involves a database, hit a scratch DB or a local file with a clear "PROTOTYPE, wipe me" name.
+4. **Skip the polish.** No tests, no error handling beyond what makes the prototype _runnable_, no abstractions. The point is to learn something fast.
+5. **Surface the state.** After every action (logic) or on every variant switch (UI), print or render the full relevant state so the user can see what changed.
+6. **Capture it when done.** Fold any validated decision into the real code, then capture the prototype itself as a **primary source**: commit it to a throwaway branch, out of main, and leave a context pointer to that branch on the implementation issue. Capture the answer too (the verdict and the question it settled) in the issue or a commit. The main branch keeps only the validated decision.
